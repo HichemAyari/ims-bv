@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-ims_db}
+    volumes:
+      - db_data_prod:/var/lib/postgresql/data
+    networks: [ ims_net ]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-ims_db}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    image: ${REGISTRY}/${NAMESPACE}/${IMAGE_BACKEND}:${VERSION}
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-ims_db}
+      PORT: 8080
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [ ims_net ]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  frontend:
+    image: ${REGISTRY}/${NAMESPACE}/${IMAGE_FRONTEND}:${VERSION}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"    # prod exposes only HTTP 80
+    networks: [ ims_net ]
+    restart: unless-stopped
+
+networks:
+  ims_net:
+
+volumes:
+  db_data_prod:
+
+
